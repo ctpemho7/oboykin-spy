@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, model_validator
 from typing import Optional
 
 class Vendor(BaseModel):
@@ -27,12 +27,25 @@ class Shop(BaseModel):
 class Asset(BaseModel):
     """Фото"""
 
-    id: int
     roll_id: int
     url: str
 
     class Config:
         from_attributes = True
+
+    @staticmethod
+    def get_target_fields():
+        return [
+            "roll_id",
+            "url",
+        ]
+    
+    def to_row(self):
+        return [  
+            self.roll_id,
+            self.url,
+        ]
+    
 
 
 class Parent(BaseModel):
@@ -55,15 +68,44 @@ class Roll(BaseModel):
     article: str
     base: str  # Основа
     cover: str  # Покрытие
-    rapor: int = Field(default=None, alias="rapor")  # Раппорт, см
-    pattern: Optional[str] = Field(default=None, alias="room")  # Рисунок
+    uri: str
     
-    # options
-    moisture_resistance: Optional[str] = Field(default=None, alias="wp-wet")  # Влагостойкость
-    production_technology: Optional[str] = Field(default=None, alias="wp-tech")  # Технология производства
-    light_fastness: Optional[str] = Field(default=None, alias="wp-light")  # Светостойкость
-    glue_application: Optional[str] = Field(default=None, alias="wp-kleyhow")  # Нанесение клея
-    
+    rapor: Optional[str] = None # Раппорт, см
+    pattern: Optional[str] = None  # Рисунок
+    moisture_resistance: Optional[str] = None
+    production_technology: Optional[str] = None
+    light_fastness: Optional[str] = None
+    glue_application: Optional[str] = None
+
+    # options запускается до того, как Pydantic начнет проверять типы
+    @model_validator(mode='before')
+    @classmethod
+    def extract_options(cls, data: dict):
+        # берет словарь options, 
+        # достаем оттуда значения из поля value 
+        # и подкладываем их в основной словарь
+
+        options = data.get("options", {})
+        
+        # Маппинг: ключ в модели -> ключ в options
+        mapping = {
+            "rapor": "rapor",
+            "pattern": "room",
+            "moisture_resistance": "wp-wet",
+            "production_technology": "wp-tech",
+            "light_fastness": "wp-light",
+            "glue_application": "wp-kleyhow"
+        }
+        
+        for model_key, json_key in mapping.items():
+            opt_data = options.get(json_key)
+            if opt_data and isinstance(opt_data, dict):
+                data[model_key] = opt_data.get("value")
+            elif opt_data: # на случай если там сразу строка
+                data[model_key] = opt_data
+               
+        return data
+
     vendor: Vendor
     parent: Parent
 
@@ -71,23 +113,51 @@ class Roll(BaseModel):
     def collection(self) -> str:
         """Получить название коллекции из parent"""
         return self.parent.pagetitle
-    
-
-    @field_validator('color', mode='before')
-    @classmethod
-    def parse_colors(cls, v):
-        """Преобразует список строк в список объектов Color"""
-        if isinstance(v, list):
-            return [
-                Color(id=idx, name=color) if isinstance(color, str) else color
-                for idx, color in enumerate(v, start=1)
-            ]
-        return v
-
+        
     class Config:
         from_attributes = True
         populate_by_name = True  # разрешить использование alias
 
+    @staticmethod
+    def get_target_fields():
+        return [
+            "id",
+            "vendor_id",
+            "collection",
+            "uri",
+            "height",
+            "width",
+            "weight",
+            "article",
+            "base",
+            "cover",
+            "rapor",
+            "pattern",
+            "moisture_resistance",
+            "production_technology",
+            "light_fastness",
+            "glue_application",
+        ]
+
+    def to_row(self):
+        return [
+            self.id,
+            self.vendor.id,
+            self.collection,
+            self.uri,
+            self.height,
+            self.width,
+            self.weight,
+            self.article,
+            self.base,
+            self.cover,
+            self.rapor,
+            self.pattern,
+            self.moisture_resistance,
+            self.production_technology,
+            self.light_fastness,
+            self.glue_application,
+        ]
 
 class Fact(BaseModel):
     """Таблица фактов (наличие в магазине)"""
@@ -100,3 +170,19 @@ class Fact(BaseModel):
     class Config:
         from_attributes = True
 
+    @staticmethod
+    def get_target_fields():
+        return [
+            "roll_id",
+            "shop_id",
+            "price",
+            "available",
+        ]
+
+    def to_row(self):
+        return [
+            self.roll_id,
+            self.shop_id,
+            self.price,
+            self.available
+        ]
