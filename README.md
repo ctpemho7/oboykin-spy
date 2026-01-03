@@ -14,3 +14,11 @@ docker compose up --build -d
 ```
 docker compose down
 ```
+
+# Создание таблиц в mart-postgres
+
+Нужно выполнить скрипт для создания таблиц БД:
+
+```
+docker exec mart-postgres psql -U oboykin -d oboykin -f /init.sql
+```

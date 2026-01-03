@@ -7,7 +7,6 @@ RUN apt update && apt -y install procps default-jre
 
 USER airflow
 COPY ./dags/* ./dags/
-COPY ./spark/* ./spark/
 COPY ./requirements.txt ./requirements.txt 
 
 RUN pip uninstall -y apache-airflow-providers-openlineage

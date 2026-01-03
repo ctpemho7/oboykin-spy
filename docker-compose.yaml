@@ -212,31 +212,6 @@ services:
     user: "0:0"
     volumes:
       - ${AIRFLOW_PROJ_DIR:-.}:/sources
-    depends_on:
-    - spark-worker
-
-#  
-######################## SPARK ######################## 
-#  
-
-  spark-master: # мастер нода в кластере Spark
-    container_name: spark-master # ОБЯЗАТЕЛЬНО, т.к. на этот параметр многое завязано. В докере container_name = hostname внутри контейнера, т.е. это доменное имя виртуального хост
-    image: apache/spark:3.5.0 # на момент написания текста лабораторной latest  3.5.0
-    ports:
-    - '4040:8080' # Spark WebUI port
-    - '7077:7077' # Spark connection port
-    command: '/opt/spark/bin/spark-class org.apache.spark.deploy.master.Master' # команда для запуска сервиса в режиме мастер
-    depends_on:
-    - airflow-postgres
-
-  spark-worker: # воркер в кластере Spark
-    container_name: spark-worker
-    image: apache/spark:3.5.0
-    depends_on:
-    - spark-master
-    ports:
-    - "7000:7000"
-    command: '/opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077' # команда для запуска сервиса в режиме воркер и подключения к мастеру
 
 # 
 ######################## MINIO ######################## 
@@ -269,15 +244,19 @@ services:
 #  
 
   mart-postgres:
+    container_name: mart-postgres
     image: postgres:13
     environment:
-      POSTGRES_USER: airflow
-      POSTGRES_PASSWORD: airflow
-      POSTGRES_DB: airflow
+      POSTGRES_USER: oboykin
+      POSTGRES_PASSWORD: oboykin
+      POSTGRES_DB: oboykin
     volumes:
       - db_data:/var/lib/postgresql/data
+      - ./init-db/init.sql:/init.sql
+    ports:
+    - "6543:5432"
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "airflow"]
+      test: ["CMD", "pg_isready", "-U", "oboykin"]
       interval: 10s
       retries: 5
       start_period: 5s
