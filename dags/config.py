@@ -9,7 +9,7 @@ https://www.oboykin.ru/filter/products?end=300&flt-tovartype=%D0%9E%D0%B1%D0%BE%
 
 FILENAME = "file.json"
 
-BUCKET_NAME = "raw_data"
+BUCKET_NAME = "raw-data"
 
 
 def get_object_name():

@@ -50,15 +50,15 @@ x-airflow-common:
   # Comment the image line, place your Dockerfile in the directory where you placed the docker-compose.yaml
   # and uncomment the "build" line below, Then run `docker-compose build` to build the images.
   # image: ${AIRFLOW_IMAGE_NAME:-apache/airflow:2.7.1}
-  build: .
+  build: Dockerfile.simple
   image: custom_airflow_image
   environment:
     &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
-    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-postgres/airflow
     # For backward compatibility, with Airflow <2.3
-    AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
-    AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@postgres/airflow
+    AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-postgres/airflow
+    AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@airflow-postgres/airflow
     AIRFLOW__CORE__FERNET_KEY: ''
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
     AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
@@ -84,6 +84,10 @@ x-airflow-common:
       condition: service_healthy
 
 services:
+#  
+######################## AIRFLOW ######################## 
+#  
+
   airflow-postgres:
     image: postgres:13
     environment:
@@ -98,25 +102,6 @@ services:
       retries: 5
       start_period: 5s
     restart: always
-
-  spark-master: # мастер нода в кластере Spark
-    container_name: spark-master # ОБЯЗАТЕЛЬНО, т.к. на этот параметр многое завязано. В докере container_name = hostname внутри контейнера, т.е. это доменное имя виртуального хост
-    image: apache/spark:3.5.0 # на момент написания текста лабораторной latest  3.5.0
-    ports:
-    - '4040:8080' # Spark WebUI port
-    - '7077:7077' # Spark connection port
-    command: '/opt/spark/bin/spark-class org.apache.spark.deploy.master.Master' # команда для запуска сервиса в режиме мастер
-    depends_on:
-    - airflow-postgres
-
-  spark-worker: # воркер в кластере Spark
-    container_name: spark-worker
-    image: apache/spark:3.5.0
-    depends_on:
-    - spark-master
-    ports:
-    - "7000:7000"
-    command: '/opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077' # команда для запуска сервиса в режиме воркер и подключения к мастеру
 
   airflow-webserver:
     <<: *airflow-common
@@ -230,5 +215,75 @@ services:
     depends_on:
     - spark-worker
 
+#  
+######################## SPARK ######################## 
+#  
+
+  spark-master: # мастер нода в кластере Spark
+    container_name: spark-master # ОБЯЗАТЕЛЬНО, т.к. на этот параметр многое завязано. В докере container_name = hostname внутри контейнера, т.е. это доменное имя виртуального хост
+    image: apache/spark:3.5.0 # на момент написания текста лабораторной latest  3.5.0
+    ports:
+    - '4040:8080' # Spark WebUI port
+    - '7077:7077' # Spark connection port
+    command: '/opt/spark/bin/spark-class org.apache.spark.deploy.master.Master' # команда для запуска сервиса в режиме мастер
+    depends_on:
+    - airflow-postgres
+
+  spark-worker: # воркер в кластере Spark
+    container_name: spark-worker
+    image: apache/spark:3.5.0
+    depends_on:
+    - spark-master
+    ports:
+    - "7000:7000"
+    command: '/opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077' # команда для запуска сервиса в режиме воркер и подключения к мастеру
+
+# 
+######################## MINIO ######################## 
+#  
+
+  minio:
+    image: minio/minio:RELEASE.2023-05-18T00-05-36Z
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    entrypoint: ["minio", "server", "/data", "--console-address", ":9001"]
+  
+  minio-setup:
+    image: minio/mc:RELEASE.2023-05-18T16-59-00Z
+    depends_on:
+      - minio
+    volumes:
+      - ./data:/data
+    env_file:
+          - ./.env
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+        - |
+          mc config host add myminio http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD}
+          mc mb myminio/raw-data --ignore-existing
+          exit 0
+
+#  
+######################## DWH ######################## 
+#  
+
+  mart-postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 10s
+      retries: 5
+      start_period: 5s
+    restart: always
+
+
 volumes:
   airflow_postgres_db_volume:
+  db_data:

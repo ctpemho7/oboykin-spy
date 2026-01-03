@@ -4,7 +4,7 @@ from airflow.operators.python import PythonOperator
 from datetime import datetime
 import requests
 
-from .config import s3_client, URL, BUCKET_NAME, get_object_name
+from config import s3_client, URL, BUCKET_NAME, get_object_name
 
 
 default_args = {
@@ -32,8 +32,9 @@ def put_in_s3(**context):
             BUCKET_NAME,
             object_name,
             req.raw,
-            length=-1,  # Неизвестная длина
-        )
+            length=-1,  # неизвестная длина
+            part_size=5*1024*1024,  # 5MB части
+)
 
     # название в XCOM
     context['task_instance'].xcom_push(
@@ -41,3 +42,22 @@ def put_in_s3(**context):
         value=f"s3://{BUCKET_NAME}/{object_name}"
     )
 
+
+
+
+
+
+
+task_fetch = PythonOperator(
+    task_id='fetch_and_save',
+    python_callable=put_in_s3,
+    dag=dag,
+)
+
+# task_process = PythonOperator(
+#     task_id='process_and_insert',
+#     python_callable=process_json_from_s3,
+#     dag=dag,
+# )
+
+task_fetch #>> task_process
