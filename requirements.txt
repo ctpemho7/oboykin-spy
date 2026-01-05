@@ -1,0 +1,3 @@
+minio
+python-telegram-bot
+apache-airflow-providers-telegram
